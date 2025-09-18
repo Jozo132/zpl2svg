@@ -17,18 +17,25 @@ There are still a lot of bugs and missing features.
 ## Practical usage
 #### Node.JS first install:
 ```sh
-npm i bwip-js pako canvas
+npm i zpl2svg
 ```
-#### Browser import:
+#### CJS Browser import via CDN:
 ```html
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bwip-js/4.5.1/bwip-js-min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-<script src="path_to/zpl2svg.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/zpl2svg/dist/zpl2svg.min.js"></script>
+```
+#### ESM Browser import via CDN:
+```html
+<script type="module">
+  import { zpl2svg } from 'https://cdn.jsdelivr.net/npm/zpl2svg/dist/zpl2svg.mjs';
+</script>
 ```
 
 #### Node.JS import:
 ```js
-const { zpl2svg } = require('path_to/zpl2svg.js')
+// ESM
+import { zpl2svg, zpl2png } from 'zpl2svg';
+// CJS
+const { zpl2svg, zpl2png } = require('zpl2svg');
 ```
 
 #### Example:

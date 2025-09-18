@@ -1,2 +1,6 @@
 .vscode
 **/bwip-js.js
+node_modules
+package-lock.json
+dist/
+types/

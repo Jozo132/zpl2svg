@@ -3,12 +3,12 @@
 // @ts-check
 "use strict";
 (function (root, factory) { // @ts-ignore
-    if (typeof module === 'object' && module.exports) {
-        let bwipjs
-        let canvas
-        let imageLoader
+    if (typeof module === 'object' && module.exports) { // @ts-ignore
+        let bwipjs // @ts-ignore
+        let canvas // @ts-ignore
+        let imageLoader // @ts-ignore
         let pako
-        const getBwipJs = () => {
+        const getBwipJs = () => { // @ts-ignore
             if (bwipjs) return bwipjs
             try {
                 bwipjs = require('bwip-js') // @ts-ignore
@@ -18,7 +18,7 @@
             }
             return bwipjs
         }
-        const getCanvas = () => {
+        const getCanvas = () => { // @ts-ignore
             if (canvas) return canvas
             try { // @ts-ignore
                 const { createCanvas, loadImage } = require('canvas')
@@ -30,7 +30,7 @@
             }
             return canvas
         }
-        const getPako = () => {
+        const getPako = () => { // @ts-ignore
             if (pako) return pako
             try {
                 pako = require('pako')
@@ -39,9 +39,9 @@
                 throw e
             }
         }
-        const getImageLoader = () => {
+        const getImageLoader = () => { // @ts-ignore
             if (imageLoader) return imageLoader
-            getCanvas()
+            getCanvas() // @ts-ignore
             return imageLoader
         } // @ts-ignore
         module.exports = factory(getBwipJs, getCanvas, getImageLoader, getPako);
@@ -50,6 +50,7 @@
         const getBwipJs = () => bwipjs
         const getCanvas = () => canvas // @ts-ignore
         const getPako = () => pako
+        /** @param { string } src */
         const imageLoader = src => new Promise((resolve, reject) => {
             const img = new Image()
             img.onload = () => {
@@ -62,11 +63,13 @@
         const getImageLoader = () => imageLoader
         const methods = factory(getBwipJs, getCanvas, getImageLoader, getPako);
         const keys = Object.keys(methods)
-        for (let i = 0; i < keys.length; i++) {
+        for (let i = 0; i < keys.length; i++) { // @ts-ignore
             root[keys[i]] = methods[keys[i]] // Inject methods into global scope
         }
-    }
+    } // @ts-ignore
 }(typeof self !== 'undefined' ? self : this, function (getBwipjs, getCanvas, getImageLoader, getPako) {
+
+    const version = "1.0.1"
 
     /** @type { (input: string[], configuration: { family: string, size: number, style: string, weight: string }) => void } */
     const parseFont = (input, configuration) => {
@@ -106,13 +109,13 @@
 
         input = input.replace(/[ \t\n]/g, '')
         const char_array = input.split('');
-
+        // @ts-ignore
         const push = (n, c) => {
             for (let i = 0; i < n; i++) {
                 half_bytes.push(c);
             }
         }
-
+        // @ts-ignore
         const cc = c => c.charCodeAt(0)
 
         const G = cc('G')
@@ -121,7 +124,7 @@
         const z = cc('z')
 
         const seperators = [',', '!', ':']
-
+        // @ts-ignore
         const getRepeat = character => {
             if (!character) return 0
             const c = cc(character)
@@ -401,6 +404,7 @@
         svg.push(`  <!-- ######################################################### -->`)
         svg.push(`  <!-- ########## SVG Generated from ZPL using zpl2svg ######### -->`)
         svg.push(`  <!-- ######################################################### -->`)
+        svg.push(`  <!--     Version:        zpl2svg@${version.padEnd('                              '.length, ' ')}-->`)
         svg.push(`  <!--     Author:         Jozo132                               -->`)
         svg.push(`  <!--     Email:          jozo132@gmail.com                     -->`)
         svg.push(`  <!--     Source:         https://github.com/Jozo132/zpl2svg    -->`)
@@ -822,22 +826,22 @@
                             barcolor: state.stroke,
                             scale: scale,
                             rotate: state.barcode.orientation === 'B' ? 'L' : state.barcode.orientation,
-                        }
+                        } // @ts-ignore
                         if (alttext && state.barcode.print_human_readable) barcode_options.alttext = alttext
                         if (bcid === 'azteccode') { // @ts-ignore
-                            delete barcode_options.height
-                            barcode_options.scale *= state.barcode.magnification / 4
-                            barcode_options.format = 'full'
-                            if (state.barcode.error_control >= 1 && state.barcode.error_control <= 99) {
-                                barcode_options.eclevel = state.barcode.error_control
-                            }
-                            if (state.barcode.error_control >= 101 && state.barcode.error_control <= 199) barcode_options.format = 'compact'
-                            if (state.barcode.error_control >= 201 && state.barcode.error_control <= 232) barcode_options.format = 'fullrange'
+                            delete barcode_options.height // @ts-ignore
+                            barcode_options.scale *= state.barcode.magnification / 4 // @ts-ignore
+                            barcode_options.format = 'full' // @ts-ignore
+                            if (state.barcode.error_control >= 1 && state.barcode.error_control <= 99) { // @ts-ignore
+                                barcode_options.eclevel = state.barcode.error_control // @ts-ignore
+                            } // @ts-ignore
+                            if (state.barcode.error_control >= 101 && state.barcode.error_control <= 199) barcode_options.format = 'compact' // @ts-ignore
+                            if (state.barcode.error_control >= 201 && state.barcode.error_control <= 232) barcode_options.format = 'fullrange' // @ts-ignore
                             if (state.barcode.error_control === 300) barcode_options.format = 'rune'
-
-                            if (state.barcode.extended_channel) barcode_options.parse = true
-                            if (state.barcode.menu_symbol) barcode_options.menu = true
-                            if (state.barcode.number_of_symbols > 1) barcode_options.ecaddchars = state.barcode.number_of_symbols
+                            // @ts-ignore
+                            if (state.barcode.extended_channel) barcode_options.parse = true // @ts-ignore
+                            if (state.barcode.menu_symbol) barcode_options.menu = true // @ts-ignore
+                            if (state.barcode.number_of_symbols > 1) barcode_options.ecaddchars = state.barcode.number_of_symbols // @ts-ignore
                             if (state.barcode.optional_id) barcode_options.id = state.barcode.optional_id
                         }
 
@@ -877,7 +881,7 @@
                                 barcode_svg.split('\n').map(line => {
                                     line = line.trim()
                                     if (state.inverted) {
-                                        line = line.replaceAll(`stroke="#000000"`, `stroke="#FFF" ${inverted_body}`)
+                                        line = line.replace(/stroke="#000000"/g, `stroke="#FFF" ${inverted_body}`)
                                     }
                                     if (!line) return ''
                                     return '      ' + line
@@ -896,7 +900,7 @@
                             svg.push(text)
                         } else {
                             const includes_line_separator = value.includes('\\&')
-                            const text = value.replaceAll('\\&', '\n') // Newlines are ignored in ZPL, use \\& to indicate a newline
+                            const text = value.replace(/\\&/g, '\n') // Newlines are ignored in ZPL, use \\& to indicate a newline
                             const centered = alignment === 'C'
                             const right = alignment === 'R'
                             const justified = alignment === 'J'
@@ -1018,12 +1022,12 @@
                     */
                     const args = line.split(',')
                     state.barcode.type = command
-                    state.barcode.orientation = args[0] || state.barcode.orientation
-                    state.barcode.magnification = parseInt(args[1]) || 1
-                    state.barcode.extended_channel = args[2] ? args[2] === 'Y' : false
-                    state.barcode.error_control = parseInt(args[3]) || 0
-                    state.barcode.menu_symbol = args[4] ? args[4] === 'Y' : false
-                    state.barcode.number_of_symbols = parseInt(args[5]) || 1
+                    state.barcode.orientation = args[0] || state.barcode.orientation // @ts-ignore
+                    state.barcode.magnification = parseInt(args[1]) || 1 // @ts-ignore
+                    state.barcode.extended_channel = args[2] ? args[2] === 'Y' : false // @ts-ignore
+                    state.barcode.error_control = parseInt(args[3]) || 0 // @ts-ignore
+                    state.barcode.menu_symbol = args[4] ? args[4] === 'Y' : false // @ts-ignore
+                    state.barcode.number_of_symbols = parseInt(args[5]) || 1 // @ts-ignore
                     state.barcode.optional_id = args[6] || ''
                     break
                 }
@@ -1103,7 +1107,7 @@
                     const args = line.split(',')
                     state.barcode.orientation = args[0] || state.barcode.orientation
                     state.barcode.height = parseInt(args[1]) || state.barcode.default_height
-                    state.barcode.print_human_readable = args[2] ? args[2] === 'Y' : true
+                    state.barcode.print_human_readable = args[2] ? args[2] === 'Y' : true // @ts-ignore
                     state.barcode.mode = parseInt(args[3]) || 0
                     break
                 }
@@ -1140,10 +1144,10 @@
                     */
                     const args = line.split(',')
                     state.barcode.orientation = args[0] || state.barcode.orientation
-                    state.barcode.height = parseInt(args[1]) || state.barcode.default_height
-                    state.barcode.security_level = parseInt(args[2]) || 0
-                    state.barcode.columns = parseInt(args[3]) || 0
-                    state.barcode.rows = parseInt(args[4]) || 3
+                    state.barcode.height = parseInt(args[1]) || state.barcode.default_height // @ts-ignore
+                    state.barcode.security_level = parseInt(args[2]) || 0 // @ts-ignore
+                    state.barcode.columns = parseInt(args[3]) || 0 // @ts-ignore
+                    state.barcode.rows = parseInt(args[4]) || 3 // @ts-ignore
                     state.barcode.truncated = args[5] ? args[5] === 'Y' : false
                     break
                 }
@@ -1220,10 +1224,10 @@
                     */
                     const args = line.split(',')
                     state.barcode.orientation = args[0] || state.barcode.orientation
-                    state.barcode.height = parseInt(args[1]) || state.barcode.default_height
-                    state.barcode.security_level = parseInt(args[2]) || 0
-                    state.barcode.columns = parseInt(args[3]) || 0
-                    state.barcode.rows = parseInt(args[4]) || 3
+                    state.barcode.height = parseInt(args[1]) || state.barcode.default_height // @ts-ignore
+                    state.barcode.security_level = parseInt(args[2]) || 0 // @ts-ignore
+                    state.barcode.columns = parseInt(args[3]) || 0 // @ts-ignore
+                    state.barcode.rows = parseInt(args[4]) || 3 // @ts-ignore
                     state.barcode.mode = args[5] || 'N'
                     break
                 }
@@ -1249,7 +1253,7 @@
                     state.barcode.height = parseInt(args[1]) || state.barcode.default_height
                     state.barcode.print_human_readable = args[2] ? args[2] === 'Y' : true
                     state.barcode.print_above = args[3] ? args[3] === 'Y' : false
-                    state.barcode.check = args[4] ? args[4] === 'Y' : false
+                    state.barcode.check = args[4] ? args[4] === 'Y' : false // @ts-ignore
                     state.barcode.mode = args[5] || state.barcode.mode
 
                     break
@@ -1334,6 +1338,7 @@
     }
 
     // Use Image for browser and Canvas for Node.js
+    /** @type { (svg: string, options?: { scale?: number, width?: number, height?: number }) => Promise<string> } */
     const svg2png = async (svg, options) => {
         const canvas = getCanvas() // Gets a new canvas element from browser or node-canvas from Node.js
         const imageLoader = getImageLoader() // Gets a new Image element from browser or node-canvas from Node.js
@@ -1349,6 +1354,7 @@
         return png
     }
 
+    /** @type { (zpl: string, options?: { scale?: number, width?: number, height?: number, debug?: boolean }) => Promise<string> } */
     const zpl2png = async (zpl, options) => {
         const svg = zpl2svg(zpl, options)
         return await svg2png(svg, options)
@@ -1361,6 +1367,7 @@
         decodeRLE,
         generateImageBase64,
         drawGF,
+        version,
     }
 
 }));

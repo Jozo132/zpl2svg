@@ -1,0 +1,61 @@
+{
+    "name": "zpl2svg",
+    "version": "1.0.1",
+    "description": "ZPL (Zebra) to SVG converter in vanilla JS.",
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://github.com/Jozo132/zpl2svg#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Jozo132/zpl2svg.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Jozo132/zpl2svg/issues"
+    },
+    "type": "commonjs",
+    "main": "zpl2svg.js",
+    "module": "dist/zpl2svg.mjs",
+    "exports": {
+        ".": {
+            "import": "./dist/zpl2svg.mjs",
+            "require": "./zpl2svg.js"
+        }
+    },
+    "browser": "dist/zpl2svg.min.js",
+    "unpkg": "dist/zpl2svg.min.js",
+    "jsdelivr": "dist/zpl2svg.min.js",
+    "types": "types/zpl2svg.d.ts",
+    "files": [
+        "zpl2svg.js",
+        "dist/",
+        "README.md",
+        "LICENSE",
+        "types/"
+    ],
+    "peerDependencies": {
+        "bwip-js": "^4.5.1",
+        "canvas": "^2.11.2",
+        "pako": "^2.1.0"
+    },
+    "peerDependenciesMeta": {
+        "canvas": {
+            "optional": true
+        }
+    },
+    "scripts": {
+        "build": "esbuild zpl2svg.js --bundle --format=iife --global-name=zpl2svg --minify --outfile=dist/zpl2svg.min.js && node src/build.mjs",
+        "generate:types": "npx tsc --declaration --emitDeclarationOnly --allowJs --outDir types zpl2svg.js",
+        "prepublishOnly": "npm run build && npm run pack:check && npm run generate:types",
+        "pack:check": "npm pack --dry-run"
+    },
+    "keywords": [
+        "zpl",
+        "svg",
+        "barcode",
+        "label",
+        "zebra"
+    ],
+    "devDependencies": {
+        "esbuild": "^0.25.10",
+        "typescript": "^5.9.2"
+    }
+}
