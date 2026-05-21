@@ -203,7 +203,7 @@
             }
         }
         const base64 = generateImageBase64({ bitmap, width, height, inverted })
-        const data = `<image x="0" y="0" width="${width}" height="${height}" size="${bitmap.length}" xlink:href="${base64}" ${inverted ? 'class="zpl-inverted"' : ''} />`
+        const data = `<image x="0" y="0" width="${width}" height="${height}" size="${bitmap.length}" xlink:href="${base64}" image-rendering="pixelated" ${inverted ? 'class="zpl-inverted"' : ''} />`
         image_cache.push({
             id: img_id,
             parameters,
@@ -305,6 +305,22 @@
                 }
             }
         }
+        return bitmap
+    }
+
+    /** @type { (hex: string, width: number, height: number) => (1|0)[] } */
+    const hex_to_bitmap = (hex, width, height) => {
+        const bitmap = new Array(width * height).fill(0)
+        let index = 0
+
+        for (let i = 0; i < hex.length && index < bitmap.length; i += 2) {
+            const byte = parseInt(hex.slice(i, i + 2), 16)
+
+            for (let bit = 7; bit >= 0 && index < bitmap.length; bit--) {
+                bitmap[index++] = (byte >> bit) & 1
+            }
+        }
+
         return bitmap
     }
 
@@ -1310,9 +1326,14 @@
                         const height = (parseInt(graphic_field_count) / (parseInt(bytesPerRow) || 1)) || Infinity
 
                         // Check if Z64 compression is used
-                        const z64 = graphic.includes('Z')
-                        if (z64) {
+                        const is_z64_compr = graphic.includes('Z')
+                        // Check if HEX w/ valid length
+                        const is_plain_hex = /^[0-9a-f]+$/i.test(graphic) && graphic.length === parseInt(graphic_field_count) * 2
+
+                        if (is_z64_compr) {
                             pixelData = z64_to_bitmap(graphic, width, height)
+                        } else if (is_plain_hex) {
+                            pixelData = hex_to_bitmap(graphic, width, height)
                         } else {
                             pixelData = rle_to_bitmap(graphic, width, height)
                         }
