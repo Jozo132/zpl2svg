@@ -71,35 +71,37 @@
 
     const version = "1.0.1"
 
-    /** @type { (input: string[], configuration: { family: string, size: number, style: string, weight: string }) => void } */
+    const FONTS_BY_FAMILY = {
+        'OCR-A': { A: 5, B: 7, C: 10, D: 10, H: 13 },
+        'OCR-B': { E: 15, F: 13, G: 40 },
+        'Helvetica': { P: 18, Q: 24, R: 31, S: 35, T: 42, U: 53, V: 71 },
+        'SYMBOL PROPORTIONAL': { GS: 0 }
+    };
+
+    /** @type { (input: (string | null)[], configuration: { family: string, size: number, style: string, weight: string, orientation: string | null }) => void } */
     const parseFont = (input, configuration) => {
-        const [font, height, width] = input
+        const [font, orientation, height, width] = input
         const scale = 6 // Magic number to scale the font size to kinda match the real ZPL output
-        switch (font) {
-            case 'A': configuration.family = "OCR-A"; configuration.size = 5 * scale; break
-            case 'B': configuration.family = "OCR-A"; configuration.size = 7 * scale; break
-            case 'C': configuration.family = "OCR-A"; configuration.size = 10 * scale; break
-            case 'D': configuration.family = "OCR-A"; configuration.size = 10 * scale; break
-            case 'E': configuration.family = "OCR-B"; configuration.size = 15 * scale; break
-            case 'F': configuration.family = "OCR-B"; configuration.size = 13 * scale; break
-            case 'G': configuration.family = "OCR-B"; configuration.size = 40 * scale; break
-            case 'H': configuration.family = "OCR-A"; configuration.size = 13 * scale; break
-            case 'GS': configuration.family = "SYMBOL PROPORTIONAL"; break
-            case 'O':
-            case '0': configuration.family = "Arial, Helvetica, sans-serif"; configuration.size = +height || +width || configuration.size; break
-            case 'P': configuration.family = "Helvetica"; configuration.size = 18 * scale; break
-            case 'Q': configuration.family = "Helvetica"; configuration.size = 24 * scale; break
-            case 'R': configuration.family = "Helvetica"; configuration.size = 31 * scale; break
-            case 'S': configuration.family = "Helvetica"; configuration.size = 35 * scale; break
-            case 'T': configuration.family = "Helvetica"; configuration.size = 42 * scale; break
-            case 'U': configuration.family = "Helvetica"; configuration.size = 53 * scale; break
-            case 'V': configuration.family = "Helvetica"; configuration.size = 71 * scale; break
-            default:
-                console.log(`Unknown font: ${font}`)
-                break
+
+        if (orientation) configuration.orientation = orientation;
+
+        if (font === '0' || font === 'O') {
+            configuration.family = "Arial, Helvetica, sans-serif";
+            configuration.size = (height ? +height : 0) || (width ? +width : 0) || configuration.size;
+            return;
+        }
+
+        // Sucht die Familie, in der das Kürzel existiert
+        const family = Object.keys(FONTS_BY_FAMILY).find(f => font && font in FONTS_BY_FAMILY[f]);
+
+        if (family && font) {
+            configuration.family = family;
+            const baseSize = FONTS_BY_FAMILY[family][font];
+            if (baseSize) configuration.size = baseSize * scale;
+        } else {
+            console.log(`Unknown font: ${font}`)
         }
     }
-
 
     /** @type { (input: string) => (number | ',' | '!' | ':')[] } */
     const decodeRLE = input => {
@@ -340,12 +342,14 @@
             scanning: false,
             font: {
                 family: "Arial",
+                orientation: "N",
                 size: 10,
                 style: "normal",
                 weight: "normal"
             },
             next_font: {
                 family: "",
+                orientation: "",
                 size: 0,
                 style: "",
                 weight: "",
@@ -361,10 +365,6 @@
                 y: 0,
                 typeset: false,
             },
-            // TODO: implement field alignment
-            field_orientation: 'N',
-            field_alignment: 0, // 0: left, 1: right, 2: auto
-
             label_home_x: 0,
             label_home_y: 0,
             label_width: 0,
@@ -386,18 +386,6 @@
                 print_human_readable: true,
                 print_above: false,
             }
-        }
-        const resetNextFont = () => {
-            state.next_font.size = 0
-            state.next_font.family = ''
-            state.next_font.style = ''
-            state.next_font.weight = ''
-            state.next_font.max_width = 0
-            state.next_font.max_lines = 1
-            state.next_font.line_spacing = 0
-            state.next_font.alignment = 'L'
-            state.next_font.hanging_indent = 0
-            state.next_font.parse_hex = false
         }
         const main_classes = [
             custom_class
@@ -457,7 +445,7 @@
                 const args = line.split(',')
                 const font = command[1]
                 const [orientation, height, width] = args
-                parseFont([font, height, width], state.next_font)
+                parseFont([font, orientation, height, width], state.next_font)
                 continue
             }
 
@@ -490,10 +478,9 @@
                 }
 
                 case 'FW': { // Field orientation and alignment
-                    // TODO: implement field orientation and alignment
                     const args = line.split(',')
-                    state.field_orientation = args[0] || 'N'
-                    state.field_alignment = parseInt(args[1]) || 0
+                    state.next_font.orientation = args[0]
+                    state.next_font.alignment = ['L','R','J'][parseInt(args[1] ?? 0)]
                     break
                 }
 
@@ -521,11 +508,11 @@
                     */
                     const args = line.split(',')
                     const [orientation, height, width, drive, font, extension] = args
-                    parseFont([font, height, width], state.next_font)
+                    parseFont([font, orientation, height, width], state.next_font)
 
                     break
                 }
-                case 'CF': parseFont(line.split(','), state.font); break
+                case 'CF': ((args) => parseFont([args[0], null, args[1], args[2]], state.font))(line.split(',')); break;
 
                 case 'PW': { // Print Width
                     const args = line.split(',')
@@ -795,13 +782,13 @@
                     const family = state.next_font.family || state.font.family
                     const style = state.next_font.style || state.font.style
                     const weight = state.next_font.weight || state.font.weight
+                    const orientation = state.next_font.orientation || state.font.orientation
                     const max_width = state.next_font.max_width
                     const max_lines = state.next_font.max_lines
                     const line_spacing = state.next_font.line_spacing
                     const alignment = state.next_font.alignment
                     const hanging_indent = state.next_font.hanging_indent
                     const parse_hex = state.next_font.parse_hex
-                    resetNextFont()
 
                     if (parse_hex) {
                         // Split text by underscore and take the next two characters and interpret them as 02x which represents the character code, if invalid just skip that character
@@ -931,7 +918,8 @@
                         if (!text_block) {
                             const x = state.position.x + state.label_home_x
                             const y = state.position.y + state.label_home_y
-                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${value}</text>`
+                            const transform = orientation === 'N' ? '' : ` transform="rotate(${'NRIB'.indexOf(orientation) * 90} ${x} ${y})"`
+                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${value}</text>`
                             svg.push(text)
                         } else {
                             const includes_line_separator = value.includes('\\&')
@@ -945,6 +933,7 @@
 
                             const x = state.position.x + state.label_home_x + (centered ? max_width / 2 : 0) + (right ? max_width : 0)
                             let y = state.position.y + state.label_home_y
+                            const transform = orientation === 'N' ? '' : ` transform="rotate(${'NRIB'.indexOf(orientation) * 90} ${x} ${y})"`
 
                             /** @type {{ [character: string]: number }} */
                             const character_widths = {}
@@ -990,7 +979,7 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: middle;" to center the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: middle;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: middle;">${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
@@ -998,21 +987,21 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: end;" to right-align the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: end;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: end;">${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
                             } else if (left) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
                             } else if (justified) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
