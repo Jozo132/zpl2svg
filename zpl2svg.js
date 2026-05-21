@@ -86,8 +86,7 @@
             case 'H': configuration.family = "OCR-A"; configuration.size = 13 * scale; break
             case 'GS': configuration.family = "SYMBOL PROPORTIONAL"; break
             case 'O':
-            // case '0': configuration.family = "Helvetica"; configuration.size = (+height * 0.5 * (scale || 1)) || configuration.size; break
-            case '0': configuration.family = "ms-gothic, sans-serif"; configuration.size = +height || configuration.size; break
+            case '0': configuration.family = "Arial, Helvetica, sans-serif"; configuration.size = +height || +width || configuration.size; break
             case 'P': configuration.family = "Helvetica"; configuration.size = 18 * scale; break
             case 'Q': configuration.family = "Helvetica"; configuration.size = 24 * scale; break
             case 'R': configuration.family = "Helvetica"; configuration.size = 31 * scale; break
@@ -344,6 +343,7 @@
             position: {
                 x: 0,
                 y: 0,
+                typeset: false,
             },
             // TODO: implement field alignment
             field_orientation: 'N',
@@ -432,7 +432,7 @@
             // Match command with 'A' and any number or character
             const nf = state.scanning && command[0] === 'A' && command.match(/^A(\d|\w)/)
             if (nf) { // Format ^Af,o,h,w
-                /* 
+                /*
                     - f: font name (0-9, A-Z)
                     - o: orientation (N, R, I, B)
                     - h: height (1-32000)
@@ -490,6 +490,7 @@
 
                 case 'FS':
                     state.inverted = false
+                    state.position.typeset = false
                     break // End of field
 
                 case 'A@': { // Use font name to call font
@@ -532,6 +533,23 @@
                     const args = line.split(',')
                     state.position.x = parseInt(args[0]);
                     state.position.y = parseInt(args[1]);
+                    state.position.typeset = false
+                    break
+                }
+
+                case 'FT': { // Field Typeset
+                    const args = line.split(',')
+                    const x = parseInt(args[0])
+                    const y = parseInt(args[1])
+                    const justification = parseInt(args[2])
+
+                    if (!isNaN(x)) state.position.x = x
+                    if (!isNaN(y)) state.position.y = y
+                    state.position.typeset = true
+
+                    if (justification === 0) state.next_font.alignment = 'L'
+                    if (justification === 1) state.next_font.alignment = 'R'
+
                     break
                 }
                 // Graphic Box
@@ -892,11 +910,12 @@
                         }
                         state.barcode.type = ''
                     } else {
+                        const dy = state.position.typeset ? 0 : '0.75em'
                         const text_block = max_width > 0 || alignment !== 'L' || hanging_indent > 0
                         if (!text_block) {
                             const x = state.position.x + state.label_home_x
                             const y = state.position.y + state.label_home_y
-                            const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${value}</text>`
+                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${value}</text>`
                             svg.push(text)
                         } else {
                             const includes_line_separator = value.includes('\\&')
@@ -910,7 +929,6 @@
 
                             const x = state.position.x + state.label_home_x + (centered ? max_width / 2 : 0) + (right ? max_width : 0)
                             let y = state.position.y + state.label_home_y
-
 
                             /** @type {{ [character: string]: number }} */
                             const character_widths = {}
@@ -956,7 +974,7 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: middle;" to center the text
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: middle;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: middle;">${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
@@ -964,21 +982,21 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: end;" to right-align the text
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: end;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: end;">${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
                             } else if (left) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
                             } else if (justified) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += size + line_spacing
                                 }
