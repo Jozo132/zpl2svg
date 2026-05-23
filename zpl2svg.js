@@ -74,7 +74,7 @@
     const FONTS_BY_FAMILY = {
         'OCR-A': { A: 5, B: 7, C: 10, D: 10, H: 13 },
         'OCR-B': { E: 15, F: 13, G: 40 },
-        'Helvetica': { P: 18, Q: 24, R: 31, S: 35, T: 42, U: 53, V: 71 },
+        'Arial': { P: 18, Q: 24, R: 31, S: 35, T: 42, U: 53, V: 71 },
         'SYMBOL PROPORTIONAL': { GS: 0 }
     };
 
@@ -88,7 +88,7 @@
         const parsed_width = width ? +width : 0
 
         if (font === '0' || font === 'O') {
-            configuration.family = "Arial, Helvetica, sans-serif";
+            configuration.family = "Arial, Liberation Sans, sans-serif";
         } else {
             const family = Object.keys(FONTS_BY_FAMILY).find(f => font && font in FONTS_BY_FAMILY[f]);
             if (!family) {
@@ -342,12 +342,15 @@
         const state = {
             scanning: false,
             font: {
-                family: "Arial",
+                family: "Arial, Liberation Sans, sans-serif",
                 orientation: "N",
                 height: 10,
                 width: 0,
                 style: "normal",
-                weight: "normal"
+                weight: "bold",
+                alignment: "L",
+                letter_spacing: -0.4,// tested @ FF w/ MacOS 14.8.x
+                width_scale:     0.86// tested @ FF w/ MacOS 14.8.x
             },
             next_font: {
                 family: "",
@@ -448,7 +451,7 @@
                 const args = line.split(',')
                 const font = command[1]
                 const [orientation, height, width] = args
-                parseFont([font, orientation, height, width], state.next_font)
+                parseFont([font, orientation || state.font.orientation, height, width], state.next_font)
                 continue
             }
 
@@ -482,8 +485,8 @@
 
                 case 'FW': { // Field orientation and alignment
                     const args = line.split(',')
-                    state.next_font.orientation = args[0]
-                    state.next_font.alignment = ['L','R','J'][parseInt(args[1] ?? 0)]
+                    state.next_font.orientation = state.font.orientation = args[0] || state.font.orientation
+                    state.next_font.alignment = state.font.alignment = ['L','R','J'][parseInt(args[1] ?? 0)] || state.font.alignment
                     break
                 }
 
@@ -511,11 +514,11 @@
                     */
                     const args = line.split(',')
                     const [orientation, height, width, drive, font, extension] = args
-                    parseFont([font, orientation, height, width], state.next_font)
+                    parseFont([font, orientation || state.font.orientation, height, width], state.next_font)
 
                     break
                 }
-                case 'CF': ((args) => parseFont([args[0], null, args[1], args[2]], state.font))(line.split(',')); break;
+                case 'CF': ((args) => parseFont([args[0], state.font.orientation, args[1], args[2]], state.font))(line.split(',')); break;
 
                 case 'PW': { // Print Width
                     const args = line.split(',')
@@ -787,7 +790,19 @@
                     const height = state.next_font.height || state.font.height
                     const width = state.next_font.width || state.font.width
                     const style = state.next_font.style || state.font.style
-                    const weight = state.next_font.weight || state.font.weight
+
+                    const scale_x = (width && height ? width / height : 1) * state.font.width_scale
+
+                    const get_text_transform = (x, y) => {
+                        const rot = 'NRIB'.indexOf(orientation) * 90;
+                        const rad = rot * Math.PI / 180;
+                        const c = Math.cos(rad), s = Math.sin(rad);
+                        const a = c * scale_x, b = s * scale_x;
+
+                        return rot || scale_x !== 1
+                            ? ` transform="matrix(${a} ${b} ${-s} ${c} ${x - a * x + s * y} ${y - b * x - c * y})"`
+                            : '';
+                    };
 
                     const max_width = state.next_font.max_width
                     const max_lines = state.next_font.max_lines
@@ -930,8 +945,7 @@
                         if (!text_block) {
                             const x = state.position.x + state.label_home_x
                             const y = state.position.y + state.label_home_y
-                            const transform = orientation === 'N' ? '' : ` transform="rotate(${'NRIB'.indexOf(orientation) * 90} ${x} ${y})"`
-                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${value}</text>`
+                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${value}</text>`
                             svg.push(text)
                         } else {
                             const includes_line_separator = value.includes('\\&')
@@ -945,8 +959,6 @@
 
                             const x = state.position.x + state.label_home_x + (centered ? max_width / 2 : 0) + (right ? max_width : 0)
                             let y = state.position.y + state.label_home_y
-                            const transform = orientation === 'N' ? '' : ` transform="rotate(${'NRIB'.indexOf(orientation) * 90} ${x} ${y})"`
-
                             /** @type {{ [character: string]: number }} */
                             const character_widths = {}
                             const characters = text.split('')
@@ -956,7 +968,7 @@
                                 const measured = typeof character_widths[c] !== 'undefined'
                                 if (measured) return
                                 const metrics = measureText(c, { family, orientation, height, width, style, weight })
-                                character_widths[c] = metrics.width
+                                character_widths[c] = (metrics.width + state.font.letter_spacing) * scale_x
                             })
 
                             const lines = []
@@ -991,7 +1003,7 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: middle;" to center the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: middle;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: middle;">${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += height + line_spacing
                                 }
@@ -999,21 +1011,21 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: end;" to right-align the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: end;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: end;">${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (left) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (justified) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${line}</text>`
                                     svg.push(text)
                                     if (i < max_lines - 1) y += height + line_spacing
                                 }
