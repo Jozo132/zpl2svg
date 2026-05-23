@@ -775,6 +775,7 @@
                     state.inverted = true;
                     break
 
+                case 'FV':
                 case 'FD': { // Field Data (Text or Barcode)
 
                     const args = line.split(',')
@@ -826,8 +827,8 @@
                             case 'B9': bcid = 'upce'; break // Works
                             case 'BA': bcid = 'code93'; break // Works
                             case 'BB': bcid = 'codablockf'; break // Works
-                            // case 'BC': bcid = 'code128'; break // Not exactly the same
                             case 'BC': bcid = 'hibccode128'; alttext = value; break // Works
+                            case 'BD': bcid = 'maxicode'; break
                             default: break
                         }
                         if (!bcid) {
@@ -869,6 +870,12 @@
                             if (state.barcode.menu_symbol) barcode_options.menu = true // @ts-ignore
                             if (state.barcode.number_of_symbols > 1) barcode_options.ecaddchars = state.barcode.number_of_symbols // @ts-ignore
                             if (state.barcode.optional_id) barcode_options.id = state.barcode.optional_id
+                        }
+                        if (bcid === 'maxicode') {
+                            Object.assign(barcode_options, {
+                                parse: true,
+                                scale: 2,// CAREFULL; need adp. if width/height !=~ 200px
+                            })
                         }
 
                         // @ts-ignore
@@ -1283,7 +1290,15 @@
                     state.barcode.print_above = args[3] ? args[3] === 'Y' : false
                     state.barcode.check = args[4] ? args[4] === 'Y' : false // @ts-ignore
                     state.barcode.mode = args[5] || state.barcode.mode
+                    break
+                }
 
+                // MaxiCode
+                case 'BD': {
+                    const args = line.split(',')
+                    state.barcode.type = command
+                    state.barcode.mode = parseInt(args[0]) || 2
+                    // TODO; https://docs.zebra.com/us/en/printers/software/zpl-pg/c-zpl-zpl-commands/r-zpl-bd.html
                     break
                 }
 
