@@ -78,29 +78,30 @@
         'SYMBOL PROPORTIONAL': { GS: 0 }
     };
 
-    /** @type { (input: (string | null)[], configuration: { family: string, size: number, style: string, weight: string, orientation: string | null }) => void } */
+    /** @type { (input: (string | null)[], configuration: { family: string, orientation: string | null, height: number, width: number, style: string, weight: string }) => void } */
     const parseFont = (input, configuration) => {
         const [font, orientation, height, width] = input
         const scale = 6 // Magic number to scale the font size to kinda match the real ZPL output
 
         if (orientation) configuration.orientation = orientation;
+        const parsed_height = height ? +height : 0
+        const parsed_width = width ? +width : 0
 
         if (font === '0' || font === 'O') {
             configuration.family = "Arial, Helvetica, sans-serif";
-            configuration.size = (height ? +height : 0) || (width ? +width : 0) || configuration.size;
-            return;
-        }
-
-        // Sucht die Familie, in der das Kürzel existiert
-        const family = Object.keys(FONTS_BY_FAMILY).find(f => font && font in FONTS_BY_FAMILY[f]);
-
-        if (family && font) {
-            configuration.family = family;
-            const baseSize = FONTS_BY_FAMILY[family][font];
-            if (baseSize) configuration.size = baseSize * scale;
         } else {
-            console.log(`Unknown font: ${font}`)
+            const family = Object.keys(FONTS_BY_FAMILY).find(f => font && font in FONTS_BY_FAMILY[f]);
+            if (!family) {
+                console.log(`Unknown font: ${font}`)
+                return;
+            }
+            configuration.family = family;
+
+            const base_size = FONTS_BY_FAMILY[family][font];
+            if (base_size) configuration.height = base_size * scale;
         }
+        configuration.height = parsed_height || parsed_width || configuration.height
+        configuration.width = parsed_width || parsed_height || configuration.width
     }
 
     /** @type { (input: string) => (number | ',' | '!' | ':')[] } */
@@ -343,14 +344,16 @@
             font: {
                 family: "Arial",
                 orientation: "N",
-                size: 10,
+                height: 10,
+                width: 0,
                 style: "normal",
                 weight: "normal"
             },
             next_font: {
                 family: "",
                 orientation: "",
-                size: 0,
+                height: 0,
+                width: 0,
                 style: "",
                 weight: "",
                 max_width: 0,
@@ -391,12 +394,12 @@
             custom_class
         ].filter(Boolean).join(' ')
 
-        /** @type { (text: string, size: number, family: string, style: string, weight: string) => TextMetrics } */
-        const measureText = (text, size, family, style, weight) => {
+        /** @type { (text: string, configuration: { family: string, orientation: string, height: number, width: number, style: string, weight: string }) => TextMetrics } */
+        const measureText = (text, configuration) => {
             const canvas = getCanvas()
             const ctx = canvas.getContext('2d')
             if (!ctx) throw new Error('Failed to get 2d context')
-            ctx.font = `${style} ${weight} ${size}px ${family}`
+            ctx.font = `${configuration.style} ${configuration.weight} ${configuration.height}px ${configuration.family}`
             return ctx.measureText(text)
         }
 
@@ -778,11 +781,13 @@
                     state.inverted = false
                     let value = args.join(',')
 
-                    const size = state.next_font.size || state.font.size
                     const family = state.next_font.family || state.font.family
+                    const orientation = state.next_font.orientation || state.font.orientation
+                    const height = state.next_font.height || state.font.height
+                    const width = state.next_font.width || state.font.width
                     const style = state.next_font.style || state.font.style
                     const weight = state.next_font.weight || state.font.weight
-                    const orientation = state.next_font.orientation || state.font.orientation
+
                     const max_width = state.next_font.max_width
                     const max_lines = state.next_font.max_lines
                     const line_spacing = state.next_font.line_spacing
@@ -919,7 +924,7 @@
                             const x = state.position.x + state.label_home_x
                             const y = state.position.y + state.label_home_y
                             const transform = orientation === 'N' ? '' : ` transform="rotate(${'NRIB'.indexOf(orientation) * 90} ${x} ${y})"`
-                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${value}</text>`
+                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${value}</text>`
                             svg.push(text)
                         } else {
                             const includes_line_separator = value.includes('\\&')
@@ -943,7 +948,7 @@
                                 if (c === '\n') return
                                 const measured = typeof character_widths[c] !== 'undefined'
                                 if (measured) return
-                                const metrics = measureText(c, size, family, style, weight)
+                                const metrics = measureText(c, { family, orientation, height, width, style, weight })
                                 character_widths[c] = metrics.width
                             })
 
@@ -979,31 +984,31 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: middle;" to center the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: middle;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: middle;">${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (right) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: end;" to right-align the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: end;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body} style="text-anchor: end;">${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (left) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (justified) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}"${transform} ${inverted_body}>${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else {
                                 console.error(new Error(`Unsupported alignment: ${alignment}`))
