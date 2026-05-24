@@ -71,36 +71,38 @@
 
     const version = "1.0.1"
 
-    /** @type { (input: string[], configuration: { family: string, size: number, style: string, weight: string }) => void } */
-    const parseFont = (input, configuration) => {
-        const [font, height, width] = input
-        const scale = 6 // Magic number to scale the font size to kinda match the real ZPL output
-        switch (font) {
-            case 'A': configuration.family = "OCR-A"; configuration.size = 5 * scale; break
-            case 'B': configuration.family = "OCR-A"; configuration.size = 7 * scale; break
-            case 'C': configuration.family = "OCR-A"; configuration.size = 10 * scale; break
-            case 'D': configuration.family = "OCR-A"; configuration.size = 10 * scale; break
-            case 'E': configuration.family = "OCR-B"; configuration.size = 15 * scale; break
-            case 'F': configuration.family = "OCR-B"; configuration.size = 13 * scale; break
-            case 'G': configuration.family = "OCR-B"; configuration.size = 40 * scale; break
-            case 'H': configuration.family = "OCR-A"; configuration.size = 13 * scale; break
-            case 'GS': configuration.family = "SYMBOL PROPORTIONAL"; break
-            case 'O':
-            // case '0': configuration.family = "Helvetica"; configuration.size = (+height * 0.5 * (scale || 1)) || configuration.size; break
-            case '0': configuration.family = "ms-gothic, sans-serif"; configuration.size = +height || configuration.size; break
-            case 'P': configuration.family = "Helvetica"; configuration.size = 18 * scale; break
-            case 'Q': configuration.family = "Helvetica"; configuration.size = 24 * scale; break
-            case 'R': configuration.family = "Helvetica"; configuration.size = 31 * scale; break
-            case 'S': configuration.family = "Helvetica"; configuration.size = 35 * scale; break
-            case 'T': configuration.family = "Helvetica"; configuration.size = 42 * scale; break
-            case 'U': configuration.family = "Helvetica"; configuration.size = 53 * scale; break
-            case 'V': configuration.family = "Helvetica"; configuration.size = 71 * scale; break
-            default:
-                console.log(`Unknown font: ${font}`)
-                break
-        }
-    }
+    const FONTS_BY_FAMILY = {
+        'OCR-A': { A: 5, B: 7, C: 10, D: 10, H: 13 },
+        'OCR-B': { E: 15, F: 13, G: 40 },
+        'Arial': { P: 18, Q: 24, R: 31, S: 35, T: 42, U: 53, V: 71 },
+        'SYMBOL PROPORTIONAL': { GS: 0 }
+    };
 
+    /** @type { (input: (string | null)[], configuration: { family: string, orientation: string | null, height: number, width: number, style: string, weight: string }) => void } */
+    const parseFont = (input, configuration) => {
+        const [font, orientation, height, width] = input
+        const scale = 6 // Magic number to scale the font size to kinda match the real ZPL output
+
+        if (orientation) configuration.orientation = orientation;
+        const parsed_height = height ? +height : 0
+        const parsed_width = width ? +width : 0
+
+        if (font === '0' || font === 'O') {
+            configuration.family = "Arial, Liberation Sans, sans-serif";
+        } else {
+            const family = Object.keys(FONTS_BY_FAMILY).find(f => font && font in FONTS_BY_FAMILY[f]);
+            if (!family) {
+                console.log(`Unknown font: ${font}`)
+                return;
+            }
+            configuration.family = family;
+
+            const base_size = FONTS_BY_FAMILY[family][font];
+            if (base_size) configuration.height = base_size * scale;
+        }
+        configuration.height = parsed_height || parsed_width || configuration.height
+        configuration.width = parsed_width || parsed_height || configuration.width
+    }
 
     /** @type { (input: string) => (number | ',' | '!' | ':')[] } */
     const decodeRLE = input => {
@@ -204,7 +206,7 @@
             }
         }
         const base64 = generateImageBase64({ bitmap, width, height, inverted })
-        const data = `<image x="0" y="0" width="${width}" height="${height}" size="${bitmap.length}" xlink:href="${base64}" ${inverted ? 'class="zpl-inverted"' : ''} />`
+        const data = `<image x="0" y="0" width="${width}" height="${height}" size="${bitmap.length}" xlink:href="${base64}" image-rendering="pixelated" ${inverted ? 'class="zpl-inverted"' : ''} />`
         image_cache.push({
             id: img_id,
             parameters,
@@ -309,6 +311,22 @@
         return bitmap
     }
 
+    /** @type { (hex: string, width: number, height: number) => (1|0)[] } */
+    const hex_to_bitmap = (hex, width, height) => {
+        const bitmap = new Array(width * height).fill(0)
+        let index = 0
+
+        for (let i = 0; i < hex.length && index < bitmap.length; i += 2) {
+            const byte = parseInt(hex.slice(i, i + 2), 16)
+
+            for (let bit = 7; bit >= 0 && index < bitmap.length; bit--) {
+                bitmap[index++] = (byte >> bit) & 1
+            }
+        }
+
+        return bitmap
+    }
+
 
     /** @type { (zpl: string, options?: { width?: number, height?: number, scale?: number, x_offset?: number, y_offset?: number, custom_class?: string, debug?: boolean, dynamic_size?: boolean }) => string } */
     const zpl2svg = (zpl, options) => {
@@ -324,14 +342,21 @@
         const state = {
             scanning: false,
             font: {
-                family: "Arial",
-                size: 10,
+                family: "Arial, Liberation Sans, sans-serif",
+                orientation: "N",
+                height: 10,
+                width: 0,
                 style: "normal",
-                weight: "normal"
+                weight: "bold",
+                alignment: "L",
+                letter_spacing: -0.4,// tested @ FF w/ MacOS 14.8.x
+                width_scale:     0.86// tested @ FF w/ MacOS 14.8.x
             },
             next_font: {
                 family: "",
-                size: 0,
+                orientation: "",
+                height: 0,
+                width: 0,
                 style: "",
                 weight: "",
                 max_width: 0,
@@ -344,11 +369,8 @@
             position: {
                 x: 0,
                 y: 0,
+                typeset: false,
             },
-            // TODO: implement field alignment
-            field_orientation: 'N',
-            field_alignment: 0, // 0: left, 1: right, 2: auto
-
             label_home_x: 0,
             label_home_y: 0,
             label_width: 0,
@@ -371,28 +393,16 @@
                 print_above: false,
             }
         }
-        const resetNextFont = () => {
-            state.next_font.size = 0
-            state.next_font.family = ''
-            state.next_font.style = ''
-            state.next_font.weight = ''
-            state.next_font.max_width = 0
-            state.next_font.max_lines = 1
-            state.next_font.line_spacing = 0
-            state.next_font.alignment = 'L'
-            state.next_font.hanging_indent = 0
-            state.next_font.parse_hex = false
-        }
         const main_classes = [
             custom_class
         ].filter(Boolean).join(' ')
 
-        /** @type { (text: string, size: number, family: string, style: string, weight: string) => TextMetrics } */
-        const measureText = (text, size, family, style, weight) => {
+        /** @type { (text: string, configuration: { family: string, orientation: string, height: number, width: number, style: string, weight: string }) => TextMetrics } */
+        const measureText = (text, configuration) => {
             const canvas = getCanvas()
             const ctx = canvas.getContext('2d')
             if (!ctx) throw new Error('Failed to get 2d context')
-            ctx.font = `${style} ${weight} ${size}px ${family}`
+            ctx.font = `${configuration.style} ${configuration.weight} ${configuration.height}px ${configuration.family}`
             return ctx.measureText(text)
         }
 
@@ -432,7 +442,7 @@
             // Match command with 'A' and any number or character
             const nf = state.scanning && command[0] === 'A' && command.match(/^A(\d|\w)/)
             if (nf) { // Format ^Af,o,h,w
-                /* 
+                /*
                     - f: font name (0-9, A-Z)
                     - o: orientation (N, R, I, B)
                     - h: height (1-32000)
@@ -441,7 +451,7 @@
                 const args = line.split(',')
                 const font = command[1]
                 const [orientation, height, width] = args
-                parseFont([font, height, width], state.next_font)
+                parseFont([font, orientation || state.font.orientation, height, width], state.next_font)
                 continue
             }
 
@@ -474,10 +484,9 @@
                 }
 
                 case 'FW': { // Field orientation and alignment
-                    // TODO: implement field orientation and alignment
                     const args = line.split(',')
-                    state.field_orientation = args[0] || 'N'
-                    state.field_alignment = parseInt(args[1]) || 0
+                    state.next_font.orientation = state.font.orientation = args[0] || state.font.orientation
+                    state.next_font.alignment = state.font.alignment = ['L','R','J'][parseInt(args[1] ?? 0)] || state.font.alignment
                     break
                 }
 
@@ -490,6 +499,7 @@
 
                 case 'FS':
                     state.inverted = false
+                    state.position.typeset = false
                     break // End of field
 
                 case 'A@': { // Use font name to call font
@@ -504,11 +514,11 @@
                     */
                     const args = line.split(',')
                     const [orientation, height, width, drive, font, extension] = args
-                    parseFont([font, height, width], state.next_font)
+                    parseFont([font, orientation || state.font.orientation, height, width], state.next_font)
 
                     break
                 }
-                case 'CF': parseFont(line.split(','), state.font); break
+                case 'CF': ((args) => parseFont([args[0], state.font.orientation, args[1], args[2]], state.font))(line.split(',')); break;
 
                 case 'PW': { // Print Width
                     const args = line.split(',')
@@ -532,6 +542,23 @@
                     const args = line.split(',')
                     state.position.x = parseInt(args[0]);
                     state.position.y = parseInt(args[1]);
+                    state.position.typeset = false
+                    break
+                }
+
+                case 'FT': { // Field Typeset
+                    const args = line.split(',')
+                    const x = parseInt(args[0])
+                    const y = parseInt(args[1])
+                    const justification = parseInt(args[2])
+
+                    if (!isNaN(x)) state.position.x = x
+                    if (!isNaN(y)) state.position.y = y
+                    state.position.typeset = true
+
+                    if (justification === 0) state.next_font.alignment = 'L'
+                    if (justification === 1) state.next_font.alignment = 'R'
+
                     break
                 }
                 // Graphic Box
@@ -751,23 +778,38 @@
                     state.inverted = true;
                     break
 
+                case 'FV':
                 case 'FD': { // Field Data (Text or Barcode)
 
                     const args = line.split(',')
                     state.inverted = false
                     let value = args.join(',')
 
-                    const size = state.next_font.size || state.font.size
                     const family = state.next_font.family || state.font.family
+                    const orientation = state.next_font.orientation || state.font.orientation
+                    const height = state.next_font.height || state.font.height
+                    const width = state.next_font.width || state.font.width
                     const style = state.next_font.style || state.font.style
-                    const weight = state.next_font.weight || state.font.weight
+
+                    const scale_x = (width && height ? width / height : 1) * state.font.width_scale
+
+                    const get_text_transform = (x, y) => {
+                        const rot = 'NRIB'.indexOf(orientation) * 90;
+                        const rad = rot * Math.PI / 180;
+                        const c = Math.cos(rad), s = Math.sin(rad);
+                        const a = c * scale_x, b = s * scale_x;
+
+                        return rot || scale_x !== 1
+                            ? ` transform="matrix(${a} ${b} ${-s} ${c} ${x - a * x + s * y} ${y - b * x - c * y})"`
+                            : '';
+                    };
+
                     const max_width = state.next_font.max_width
                     const max_lines = state.next_font.max_lines
                     const line_spacing = state.next_font.line_spacing
                     const alignment = state.next_font.alignment
                     const hanging_indent = state.next_font.hanging_indent
                     const parse_hex = state.next_font.parse_hex
-                    resetNextFont()
 
                     if (parse_hex) {
                         // Split text by underscore and take the next two characters and interpret them as 02x which represents the character code, if invalid just skip that character
@@ -800,8 +842,8 @@
                             case 'B9': bcid = 'upce'; break // Works
                             case 'BA': bcid = 'code93'; break // Works
                             case 'BB': bcid = 'codablockf'; break // Works
-                            // case 'BC': bcid = 'code128'; break // Not exactly the same
                             case 'BC': bcid = 'hibccode128'; alttext = value; break // Works
+                            case 'BD': bcid = 'maxicode'; break
                             default: break
                         }
                         if (!bcid) {
@@ -843,6 +885,12 @@
                             if (state.barcode.menu_symbol) barcode_options.menu = true // @ts-ignore
                             if (state.barcode.number_of_symbols > 1) barcode_options.ecaddchars = state.barcode.number_of_symbols // @ts-ignore
                             if (state.barcode.optional_id) barcode_options.id = state.barcode.optional_id
+                        }
+                        if (bcid === 'maxicode') {
+                            Object.assign(barcode_options, {
+                                parse: true,
+                                scale: 2,// CAREFULL; need adp. if width/height !=~ 200px
+                            })
                         }
 
                         // @ts-ignore
@@ -892,11 +940,12 @@
                         }
                         state.barcode.type = ''
                     } else {
+                        const dy = state.position.typeset ? 0 : '0.75em'
                         const text_block = max_width > 0 || alignment !== 'L' || hanging_indent > 0
                         if (!text_block) {
                             const x = state.position.x + state.label_home_x
                             const y = state.position.y + state.label_home_y
-                            const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${value}</text>`
+                            const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${value}</text>`
                             svg.push(text)
                         } else {
                             const includes_line_separator = value.includes('\\&')
@@ -910,8 +959,6 @@
 
                             const x = state.position.x + state.label_home_x + (centered ? max_width / 2 : 0) + (right ? max_width : 0)
                             let y = state.position.y + state.label_home_y
-
-
                             /** @type {{ [character: string]: number }} */
                             const character_widths = {}
                             const characters = text.split('')
@@ -920,8 +967,8 @@
                                 if (c === '\n') return
                                 const measured = typeof character_widths[c] !== 'undefined'
                                 if (measured) return
-                                const metrics = measureText(c, size, family, style, weight)
-                                character_widths[c] = metrics.width
+                                const metrics = measureText(c, { family, orientation, height, width, style, weight })
+                                character_widths[c] = (metrics.width + state.font.letter_spacing) * scale_x
                             })
 
                             const lines = []
@@ -956,31 +1003,31 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: middle;" to center the text
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: middle;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: middle;">${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (right) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: end;" to right-align the text
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body} style="text-anchor: end;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: end;">${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (left) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else if (justified) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="0.75em" font-size="${size}" font-family="${family}" font-style="${style}" font-weight="${weight}" fill="${state.fill}" ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${state.font.weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${line}</text>`
                                     svg.push(text)
-                                    if (i < max_lines - 1) y += size + line_spacing
+                                    if (i < max_lines - 1) y += height + line_spacing
                                 }
                             } else {
                                 console.error(new Error(`Unsupported alignment: ${alignment}`))
@@ -1255,7 +1302,15 @@
                     state.barcode.print_above = args[3] ? args[3] === 'Y' : false
                     state.barcode.check = args[4] ? args[4] === 'Y' : false // @ts-ignore
                     state.barcode.mode = args[5] || state.barcode.mode
+                    break
+                }
 
+                // MaxiCode
+                case 'BD': {
+                    const args = line.split(',')
+                    state.barcode.type = command
+                    state.barcode.mode = parseInt(args[0]) || 2
+                    // TODO; https://docs.zebra.com/us/en/printers/software/zpl-pg/c-zpl-zpl-commands/r-zpl-bd.html
                     break
                 }
 
@@ -1292,9 +1347,14 @@
                         const height = (parseInt(graphic_field_count) / (parseInt(bytesPerRow) || 1)) || Infinity
 
                         // Check if Z64 compression is used
-                        const z64 = graphic.includes('Z')
-                        if (z64) {
+                        const is_z64_compr = graphic.includes('Z')
+                        // Check if HEX w/ valid length
+                        const is_plain_hex = /^[0-9a-f]+$/i.test(graphic) && graphic.length === parseInt(graphic_field_count) * 2
+
+                        if (is_z64_compr) {
                             pixelData = z64_to_bitmap(graphic, width, height)
+                        } else if (is_plain_hex) {
+                            pixelData = hex_to_bitmap(graphic, width, height)
                         } else {
                             pixelData = rle_to_bitmap(graphic, width, height)
                         }
