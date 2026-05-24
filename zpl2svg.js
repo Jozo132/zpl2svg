@@ -69,7 +69,7 @@
     } // @ts-ignore
 }(typeof self !== 'undefined' ? self : this, function (getBwipjs, getCanvas, getImageLoader, getPako) {
 
-    const version = "1.0.1"
+    const version = "1.1.0"
 
     const FONTS_BY_FAMILY = {
         'OCR-A': { A: 5, B: 7, C: 10, D: 10, H: 13 },
@@ -222,6 +222,18 @@
 
     /** @type { (value: number, min: number, max: number) => number } */
     const constrain = (value, min, max) => Math.min(Math.max(value, min), max)
+
+    /** @type { (value: string) => string } */
+    const escapeXmlText = value => value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+
+    /** @type { (value: string) => string } */
+    const escapeXmlComment = value => {
+        const sanitized = value.replace(/--/g, '- -')
+        return sanitized.endsWith('-') ? sanitized + ' ' : sanitized
+    }
 
     /** @type { (z64: string, width: number, height: number) => (1|0)[] } */
     const z64_to_bitmap = (z64, width, height) => {
@@ -499,7 +511,7 @@
                     break
                 }
 
-                case 'FX': svg.push(`    <!-- ${line} -->`); break // Comment
+                case 'FX': svg.push(`    <!-- ${escapeXmlComment(line)} -->`); break // Comment
 
                 case 'FS':
                     state.inverted = false
@@ -950,6 +962,7 @@
                         const dy = state.position.typeset ? 0 : '0.75em'
                         const includes_line_separator = value.includes('\\&')
                         const text = value.replace(/\\&/g, '\n') // Newlines are ignored in ZPL, use \\& to indicate a newline
+                        const escaped_text = escapeXmlText(text)
                         const centered = alignment === 'C'
                         const right = alignment === 'R'
                         const justified = alignment === 'J'
@@ -960,7 +973,7 @@
                             const x = state.position.x + state.label_home_x
                             const y = state.position.y + state.label_home_y
                             const style_attr = text_anchor ? ` style="text-anchor: ${text_anchor};"` : ''
-                            const text_element = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}${style_attr}>${text}</text>`
+                            const text_element = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}${style_attr}>${escaped_text}</text>`
                             svg.push(text_element)
                         } else {
                             if (centered && !includes_line_separator) console.warn('Centered ^FD text field without line separator "\\&"')
@@ -1032,7 +1045,7 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: middle;" to center the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: middle;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: middle;">${escapeXmlText(line)}</text>`
                                     svg.push(text)
                                     if (i < lines.length - 1) y += height + line_spacing
                                 }
@@ -1040,21 +1053,21 @@
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
                                     // Draw all lines on the same x and use style="text-anchor: end;" to right-align the text
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: end;">${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body} style="text-anchor: end;">${escapeXmlText(line)}</text>`
                                     svg.push(text)
                                     if (i < lines.length - 1) y += height + line_spacing
                                 }
                             } else if (left) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${escapeXmlText(line)}</text>`
                                     svg.push(text)
                                     if (i < lines.length - 1) y += height + line_spacing
                                 }
                             } else if (justified) {
                                 for (let i = 0; i < lines.length; i++) {
                                     const line = lines[i]
-                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${line}</text>`
+                                    const text = `    <text x="${x}" y="${y}" dy="${dy}" font-size="${height}" font-family="${family}" font-style="${style}" font-weight="${weight}" letter-spacing="${state.font.letter_spacing}" fill="${state.fill}"${get_text_transform(x, y)} ${inverted_body}>${escapeXmlText(line)}</text>`
                                     svg.push(text)
                                     if (i < lines.length - 1) y += height + line_spacing
                                 }

@@ -1,6 +1,6 @@
 {
     "name": "zpl2svg",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "description": "ZPL (Zebra) to SVG converter in vanilla JS.",
     "license": "GPL-3.0-or-later",
     "homepage": "https://github.com/Jozo132/zpl2svg#readme",
