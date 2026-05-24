@@ -71,6 +71,9 @@
 
     const version = "1.1.0"
 
+    /** @typedef {'OCR-A' | 'OCR-B' | 'Arial' | 'SYMBOL PROPORTIONAL'} FontFamily */
+
+    /** @type {Record<FontFamily, Record<string, number>>} */
     const FONTS_BY_FAMILY = {
         'OCR-A': { A: 5, B: 7, C: 10, D: 10, H: 13 },
         'OCR-B': { E: 15, F: 13, G: 40 },
@@ -90,14 +93,15 @@
         if (font === '0' || font === 'O') {
             configuration.family = "Arial, Liberation Sans, sans-serif";
         } else {
-            const family = Object.keys(FONTS_BY_FAMILY).find(f => font && font in FONTS_BY_FAMILY[f]);
+            const families = /** @type {FontFamily[]} */ (Object.keys(FONTS_BY_FAMILY))
+            const family = families.find(f => font ? font in FONTS_BY_FAMILY[f] : false);
             if (!family) {
                 console.log(`Unknown font: ${font}`)
                 return;
             }
             configuration.family = family;
 
-            const base_size = FONTS_BY_FAMILY[family][font];
+            const base_size = font ? FONTS_BY_FAMILY[family][font] : 0;
             if (base_size) configuration.height = base_size * scale;
         }
         configuration.height = parsed_height || parsed_width || configuration.height
@@ -393,6 +397,7 @@
             fill: "#000",
             inverted: false,
             alignment: "left",
+            /** @type {{ type: string, width: number, ratio: number, barscale: number, orientation: string, check: boolean, height: number, default_height: number, print_human_readable: boolean, print_above: boolean, mode: string | number, magnification?: number, extended_channel?: boolean, error_control?: number, menu_symbol?: boolean, number_of_symbols?: number, optional_id?: string, security_level?: number, columns?: number, rows?: number, truncated?: boolean }} */
             barcode: {
                 type: '',
                 width: 3, // in dots
@@ -404,6 +409,7 @@
                 default_height: 10, // in dots
                 print_human_readable: true,
                 print_above: false,
+                mode: 'N',
             }
         }
         const resetNextFont = () => {
@@ -502,7 +508,7 @@
                 case 'FW': { // Field orientation and alignment
                     const args = line.split(',')
                     state.next_font.orientation = state.font.orientation = args[0] || state.font.orientation
-                    state.next_font.alignment = state.font.alignment = ['L','R','J'][parseInt(args[1] ?? 0)] || state.font.alignment
+                    state.next_font.alignment = state.font.alignment = ['L','R','J'][parseInt(args[1] ?? '0')] || state.font.alignment
                     break
                 }
 
@@ -811,6 +817,7 @@
 
                     const scale_x = (width && height ? width / height : 1) * state.font.width_scale
 
+                    /** @type { (x: number, y: number) => string } */
                     const get_text_transform = (x, y) => {
                         const rot = 'NRIB'.indexOf(orientation) * 90;
                         const rad = rot * Math.PI / 180;
